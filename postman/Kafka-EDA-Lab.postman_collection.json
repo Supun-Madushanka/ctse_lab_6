@@ -1,0 +1,335 @@
+{
+  "info": {
+    "name": "Kafka EDA Lab – Event-Driven Architecture",
+    "_postman_id": "kafka-eda-lab-collection",
+    "description": "Lab 6 – Spring Boot microservices communicating via Kafka KRaft.\n\nImport the companion environment file 'Kafka-EDA-Lab.postman_environment.json' and select it before running.\n\nFlow:\n  POST /orders (via API Gateway :8080)\n  → Order Service publishes to Kafka 'order-topic'\n  → Inventory Service consumes → updates stock\n  → Billing Service consumes → generates invoice",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",         "value": "http://localhost:8080", "type": "string" },
+    { "key": "orderServiceUrl",  "value": "http://localhost:8081", "type": "string" },
+    { "key": "inventoryUrl",     "value": "http://localhost:8082", "type": "string" },
+    { "key": "billingUrl",       "value": "http://localhost:8083", "type": "string" }
+  ],
+  "item": [
+
+    {
+      "name": "1) Health Checks",
+      "description": "Verify all services are running before sending orders.",
+      "item": [
+        {
+          "name": "API Gateway Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('API Gateway is UP', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql('UP');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "health"]
+            },
+            "description": "Spring Boot Actuator health on port 8080."
+          }
+        },
+        {
+          "name": "Order Service Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Order Service is UP', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql('UP');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{orderServiceUrl}}/actuator/health",
+              "host": ["{{orderServiceUrl}}"],
+              "path": ["actuator", "health"]
+            },
+            "description": "Order Service health check on port 8081."
+          }
+        },
+        {
+          "name": "Inventory Service Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Inventory Service is UP', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql('UP');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{inventoryUrl}}/actuator/health",
+              "host": ["{{inventoryUrl}}"],
+              "path": ["actuator", "health"]
+            },
+            "description": "Inventory Service health check on port 8082."
+          }
+        },
+        {
+          "name": "Billing Service Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Billing Service is UP', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql('UP');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{billingUrl}}/actuator/health",
+              "host": ["{{billingUrl}}"],
+              "path": ["actuator", "health"]
+            },
+            "description": "Billing Service health check on port 8083."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "2) Order Flow (via API Gateway)",
+      "description": "Send orders through the API Gateway on port 8080.\nAfter each POST, check Docker logs:\n  docker compose logs -f inventory-service billing-service",
+      "item": [
+        {
+          "name": "POST Order – Laptop (ORD-1001)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Order accepted (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response confirms event published', function () {",
+                  "    pm.expect(pm.response.text()).to.include('Order Created');",
+                  "});",
+                  "console.log('✅ Response: ' + pm.response.text());",
+                  "console.log('👉 Now run: docker compose logs -f inventory-service billing-service');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"ORD-1001\",\n  \"item\": \"Laptop\",\n  \"quantity\": 1\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "Creates order ORD-1001 via the API Gateway.\nOrder Service publishes OrderCreated event to Kafka 'order-topic'.\nExpected log in inventory-service:\n  [Inventory] Stock updated: reserved 1 unit(s) of 'Laptop'\nExpected log in billing-service:\n  [Billing] Invoice generated: invoiceId=INV-XXXXXXXX"
+          }
+        },
+        {
+          "name": "POST Order – Keyboard (ORD-1002)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Order accepted (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response confirms event published', function () {",
+                  "    pm.expect(pm.response.text()).to.include('Order Created');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"ORD-1002\",\n  \"item\": \"Mechanical Keyboard\",\n  \"quantity\": 2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            }
+          }
+        },
+        {
+          "name": "POST Order – Monitor (ORD-1003)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Order accepted (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response confirms event published', function () {",
+                  "    pm.expect(pm.response.text()).to.include('Order Created');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"ORD-1003\",\n  \"item\": \"4K Monitor\",\n  \"quantity\": 1\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            }
+          }
+        },
+        {
+          "name": "POST Order – Headphones (ORD-1004)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Order accepted (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response confirms event published', function () {",
+                  "    pm.expect(pm.response.text()).to.include('Order Created');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"ORD-1004\",\n  \"item\": \"Noise Cancelling Headphones\",\n  \"quantity\": 2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "3) Direct Service Calls (bypass Gateway)",
+      "description": "Call the Order Service directly on port 8081, bypassing the Gateway. Useful for debugging routing or gateway issues.",
+      "item": [
+        {
+          "name": "POST Order direct – Mouse (ORD-2001)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Order accepted (200)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"ORD-2001\",\n  \"item\": \"Wireless Mouse\",\n  \"quantity\": 3\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{orderServiceUrl}}/orders",
+              "host": ["{{orderServiceUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "Calls Order Service directly on port 8081 (no Gateway)."
+          }
+        },
+        {
+          "name": "GET Order Service Custom Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{orderServiceUrl}}/orders/health",
+              "host": ["{{orderServiceUrl}}"],
+              "path": ["orders", "health"]
+            },
+            "description": "Custom /orders/health endpoint defined in OrderController."
+          }
+        }
+      ]
+    }
+
+  ]
+}
